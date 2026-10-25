@@ -1,0 +1,188 @@
+<Window x:Class="EdgeShelf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="EdgeShelf"
+        Width="136" Height="600"
+        WindowStyle="None" ResizeMode="NoResize"
+        AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" ShowActivated="False" Topmost="True"
+        TextOptions.TextRenderingMode="Grayscale"
+        TextOptions.TextFormattingMode="Ideal"
+        FontFamily="Segoe UI Variable Text, Segoe UI, Tahoma">
+
+    <Window.Resources>
+
+        <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI, Tahoma</FontFamily>
+        <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
+        <!-- Line icons used when Windows has no icon for a file (no emoji anywhere) -->
+        <Geometry x:Key="DocIcon">M9,5 H25 L35,15 V41 H9 Z M25,5 V15 H35</Geometry>
+        <Geometry x:Key="FolderIcon">M5,12 H18 L22,17 H39 V37 H5 Z</Geometry>
+
+        <!-- Round, flat icon button -->
+        <Style x:Key="IconButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#D9FFFFFF"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="9">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#2EFFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#44FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Dark rounded tooltips instead of the old grey Windows box -->
+        <Style TargetType="ToolTip">
+            <Setter Property="Foreground" Value="#FFF2F2F7"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToolTip">
+                        <Border Background="#F2202128" CornerRadius="7" Padding="9,5"
+                                BorderBrush="#26FFFFFF" BorderThickness="1">
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- One card on the shelf -->
+        <DataTemplate x:Key="ItemTemplate">
+            <Border x:Name="Card" Margin="10,3" CornerRadius="12" Background="#14FFFFFF"
+                    Cursor="Hand" ToolTip="{Binding Tooltip}"
+                    PreviewMouseLeftButtonDown="Item_PreviewMouseLeftButtonDown"
+                    PreviewMouseMove="Item_PreviewMouseMove"
+                    PreviewMouseLeftButtonUp="Item_PreviewMouseLeftButtonUp">
+                <Grid>
+
+                    <!-- File or folder: big icon, small name -->
+                    <StackPanel Margin="6,10,6,8" Visibility="{Binding FileVisibility}">
+                        <Grid Height="50">
+                            <Image Source="{Binding Icon}" Width="48" Height="48"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   Visibility="{Binding IconVisibility}"/>
+                            <Path Data="{StaticResource DocIcon}" Stretch="Uniform" Width="30" Height="36"
+                                  Stroke="#B3FFFFFF" StrokeThickness="1.6" StrokeLineJoin="Round"
+                                  Visibility="{Binding FallbackDocVisibility}"/>
+                            <Path Data="{StaticResource FolderIcon}" Stretch="Uniform" Width="38" Height="32"
+                                  Stroke="#B3FFFFFF" StrokeThickness="1.6" StrokeLineJoin="Round"
+                                  Visibility="{Binding FallbackFolderVisibility}"/>
+                        </Grid>
+                        <TextBlock Text="{Binding Label}" Foreground="#C8FFFFFF" FontSize="10.5"
+                                   TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                   MaxHeight="28" TextAlignment="Center" Margin="0,5,0,0"/>
+                    </StackPanel>
+
+                    <!-- Text: a little note card showing the first words -->
+                    <TextBlock Margin="11,10,11,10" Visibility="{Binding TextVisibility}"
+                               Text="{Binding Preview}" FlowDirection="{Binding TextFlow}"
+                               Foreground="#E6FFFFFF" FontSize="11.5"
+                               TextWrapping="Wrap" TextAlignment="Left"
+                               LineHeight="16" LineStackingStrategy="BlockLineHeight"
+                               MaxHeight="66"/>
+
+                    <!-- Remove button (only shows when the mouse is over the card) -->
+                    <Button x:Name="RemoveBtn" Style="{StaticResource IconButton}"
+                            Width="20" Height="20" Opacity="0"
+                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,3,3,0"
+                            Tag="{Binding}" ToolTip="Remove" Click="RemoveItem_Click">
+                        <TextBlock Text="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="8"/>
+                    </Button>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="Card" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Card" Property="Background" Value="#26FFFFFF"/>
+                    <Setter TargetName="RemoveBtn" Property="Opacity" Value="1"/>
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+    </Window.Resources>
+
+    <Grid>
+        <!-- The visible shape. The window never changes size: only this border grows from a thin
+             handle to the full panel, and WPF draws its rounded corners with smooth (anti-aliased) edges. -->
+        <Border x:Name="RootBorder"
+                HorizontalAlignment="Right" VerticalAlignment="Center"
+                Width="5" Height="80"
+                AllowDrop="True"
+                DragEnter="Root_DragEnter" DragOver="Root_DragOver"
+                DragLeave="Root_DragLeave" Drop="Root_Drop">
+
+            <Grid x:Name="ContentGrid" Opacity="0" IsHitTestVisible="False"
+                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                  Width="136" Height="600" UseLayoutRounding="True">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Title and buttons -->
+                <Grid Grid.Row="0" Margin="16,12,10,6">
+                    <TextBlock Text="Shelf" Foreground="White" FontWeight="SemiBold" FontSize="14"
+                               VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Style="{StaticResource IconButton}" ToolTip="Add what's on the clipboard"
+                                Click="AddClipboard_Click">
+                            <TextBlock Text="&#xE77F;" FontFamily="{StaticResource IconFont}" FontSize="14"/>
+                        </Button>
+                        <Button Style="{StaticResource IconButton}" ToolTip="Clear the shelf"
+                                Click="ClearAll_Click">
+                            <TextBlock Text="&#xE74D;" FontFamily="{StaticResource IconFont}" FontSize="14"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Items -->
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Hidden" Padding="0,0,0,6">
+                    <ItemsControl x:Name="ItemsHost" ItemTemplate="{StaticResource ItemTemplate}"/>
+                </ScrollViewer>
+
+                <!-- Empty state -->
+                <Grid x:Name="EmptyHint" Grid.Row="1" Margin="12,2,12,14" IsHitTestVisible="False">
+                    <Rectangle Stroke="#38FFFFFF" StrokeThickness="1" StrokeDashArray="3 3"
+                               RadiusX="14" RadiusY="14"/>
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="&#xE896;" FontFamily="{StaticResource IconFont}" FontSize="22"
+                                   Foreground="#B3FFFFFF" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Drop files here" Foreground="#E6FFFFFF" FontSize="12.5"
+                                   FontWeight="SemiBold" Margin="0,10,0,0" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Drag out anytime" Foreground="#80FFFFFF" FontSize="10.5"
+                                   Margin="0,3,0,0" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Small message that shows for two seconds (like "Copied") -->
+                <Border x:Name="ToastBox" Grid.Row="2" Visibility="Collapsed"
+                        HorizontalAlignment="Center" CornerRadius="10" Background="#33FFFFFF"
+                        Padding="11,4" Margin="8,2,8,12">
+                    <TextBlock x:Name="ToastText" Foreground="#F2FFFFFF" FontSize="11"
+                               TextAlignment="Center" TextWrapping="Wrap"/>
+                </Border>
+
+                <!-- Blue ring while you're dragging something over the shelf -->
+                <Border x:Name="DropRing" Grid.RowSpan="3" Visibility="Collapsed" IsHitTestVisible="False"
+                        BorderBrush="#FF7FB2FF" BorderThickness="2" CornerRadius="18,0,0,18"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
