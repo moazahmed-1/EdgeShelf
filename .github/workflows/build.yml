@@ -1,0 +1,67 @@
+name: Build and Release
+
+# Runs by itself whenever you upload new files to the main branch,
+# or manually from the Actions tab (Run workflow).
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish (single self-contained exe)
+        run: >
+          dotnet publish EdgeShelf/EdgeShelf.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -o out
+
+      - name: Make sure Inno Setup is installed
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup not found after install" }
+          Write-Host "Inno Setup ready: $iscc"
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc "/DAppVersion=1.0.${{ github.run_number }}" "installer\EdgeShelf.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Installer build failed" }
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: EdgeShelf-installer
+          path: installer-out/EdgeShelf-Setup.exe
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: EdgeShelf v1.0.${{ github.run_number }}
+          body: |
+            Download **EdgeShelf-Setup.exe** from the Assets below and run it.
+            If Windows SmartScreen shows a warning, click "More info" then "Run anyway".
+          files: installer-out/EdgeShelf-Setup.exe
